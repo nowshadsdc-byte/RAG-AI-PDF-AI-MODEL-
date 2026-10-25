@@ -5,9 +5,18 @@
 
 ## Next
 - **Finish T09/T12 with your own samples:** put a lecture-notes PDF, a research paper and a scanned PDF in `samples/`, run `npx tsx scripts/try-chunk.ts samples/<file>.pdf` on each, and fill in the chunk counts under Quick notes.
-- Then T14: run the `rag-reviewer` agent and plan Week 3 (T15 ingestion script).
+- **T18 retrieval test:** ingest your samples (`npx tsx scripts/ingest.ts samples/<file>.pdf`), write 10 questions with the expected page, run `npx tsx scripts/ask.ts "<q>" --search` and record hits in the Eval Log. Tune chunk size / top-k (T19) only with that evidence.
+- Then Week 6: Auth.js credentials + bcrypt — replace the body of `getCurrentUserId()` in `src/lib/current-user.ts` with the session user; nothing else should need to change.
 
-## Last session — 25 Oct 2026 — Week 2 code (T08–T13) ✅
+## Session — 25 Oct 2026 — W3–W5 code ✅
+- **W3 indexing & retrieval:** `src/lib/ingest.ts` (extract → clean → chunk → embed → save file as `storage/documents/<uuid>.pdf` → one DB transaction), `src/lib/search.ts` (cosine `<=>` top-5, HNSW index already migrated, filtered by `user_id`), `scripts/ingest.ts`, `scripts/ask.ts "<q>" --search`.
+- **W4 cited answers:** `src/lib/answer.ts` → `{ answer, citations: [{ documentId, documentName, page }] }`. The prompt asks the model to cite `[n]`; markers are mapped back to document + page (unknown numbers ignored). "Not found" → no citations.
+- **W5 web UI:** shadcn/ui (base-nova) set up under `src/components`; `src/components/chat-app.tsx` (upload, document list with tick-to-filter, delete, chat with citation badges that open the PDF at `#page=N`). API: `GET/POST /api/documents`, `DELETE /api/documents/:id`, `GET /api/documents/:id/file`, `POST /api/chat` — all scoped by user id, 404 for other users' ids.
+- **Temporary:** until W6 every request uses one local dev user (`dev@localhost`, unusable password hash).
+- Tested: OSHA guide ingest 2.5 s; "When was OSHA created?" → 1970, cites p. 3 ✅; "capital of France?" → not found, no citations ✅; API upload / blank PDF 422 / non-PDF 415 / bad id 404 / delete removes chunks + file ✅; lint, `tsc`, `next build` ✅.
+- Problems: InferX (DeepSeek) often returns `429 all replicas at capacity` even after 3 retries; answers take 5–15 s. Watch against the ≤ 5 s target; Qwen/Ollama in W7 is the fallback.
+
+## Earlier session — 25 Oct 2026 — Week 2 code (T08–T13) ✅
 - Done: `src/lib/extract.ts` (unpdf, page by page, `NoTextError`, pages < 20 chars flagged empty), `src/lib/clean.ts` (hyphen join, whitespace, repeated header/footer lines), `src/lib/chunk.ts` (per page, ~600 tokens / 80 overlap, `words × 1.33`), `embed()` now batches 50 per call, retries 429/503 and takes `"document" | "query"` task type (kept in `src/lib/ai/gemini.ts` behind `lib/ai`, not a separate `embed.ts`).
 - Scripts: `scripts/try-extract.ts <pdf> [--raw]`, `scripts/try-chunk.ts <pdf>` (runs the T12 checks), `npm run test:gemini` (now also tests batching + query embeddings).
 - Tested: 31-page OSHA trainer guide → 32 chunks, 1.07/page, all checks pass; blank PDF → "no text" ✅; 60-text batch → 60 × 768 ✅.
@@ -54,11 +63,11 @@
 
 ## Milestones
 - [x] W1 Setup — app + DB running
-- [ ] **W2 Extraction & chunking — page-tagged chunks + embeddings** ← you are here
-- [ ] W3 Indexing & retrieval — top-5 chunks with pages in terminal
-- [ ] W4 LLM & UI shell — cited answer / "not found" in terminal
-- [ ] W5 Web UI & chat — chat with a PDF in the browser
-- [ ] W6 Auth & privacy — users isolated
+- [x] W2 Extraction & chunking — page-tagged chunks + embeddings _(own-sample tests T09/T12 still open)_
+- [x] W3 Indexing & retrieval — top-5 chunks with pages in terminal _(10-question test T18/T19 still open)_
+- [x] W4 LLM & UI shell — cited answer / "not found" in terminal
+- [x] W5 Web UI & chat — chat with a PDF in the browser
+- [ ] **W6 Auth & privacy — users isolated** ← you are here
 - [ ] W7 History & providers — MVP feature-complete, Qwen adapter
 - [ ] W8 Evaluation & deploy — numbers recorded, Docker Compose, demo-ready
 

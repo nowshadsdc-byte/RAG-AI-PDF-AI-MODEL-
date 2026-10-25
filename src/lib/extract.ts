@@ -9,8 +9,8 @@ export const minPageChars = 20;
 
 // Thrown when no page has real text — usually a scanned PDF (OCR is out of scope).
 export class NoTextError extends Error {
-  constructor(filePath: string) {
-    super(`No extractable text in "${filePath}" (scanned PDF? OCR is not supported).`);
+  constructor(label: string) {
+    super(`No extractable text in "${label}" (scanned PDF? OCR is not supported).`);
     this.name = "NoTextError";
   }
 }
@@ -19,17 +19,25 @@ export function isEmptyPage(page: PageText): boolean {
   return page.text.trim().length < minPageChars;
 }
 
-// Reads a PDF and returns its text page by page. Page numbers start at 1 so
-// they match what the user sees in a PDF viewer (used later for citations).
-export async function extractPages(filePath: string): Promise<PageText[]> {
-  const buffer = await readFile(filePath);
-  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+// Reads a PDF (a file path, or the bytes of an upload) and returns its text
+// page by page. Page numbers start at 1 so they match what the user sees in a
+// PDF viewer (used later for citations).
+export async function extractPages(
+  source: string | Uint8Array,
+  label = typeof source === "string" ? source : "uploaded file",
+): Promise<PageText[]> {
+  // pdf.js takes ownership of the bytes it is given, so always pass a copy.
+  // `new Uint8Array(x)` copies, and also turns a Node Buffer into a plain
+  // Uint8Array, which unpdf requires.
+  const bytes = typeof source === "string" ? await readFile(source) : source;
+  const data = new Uint8Array(bytes);
+  const pdf = await getDocumentProxy(data);
   const { text } = await extractText(pdf, { mergePages: false });
 
   const pages = text.map((pageText, i) => ({ page: i + 1, text: pageText }));
 
   if (pages.every(isEmptyPage)) {
-    throw new NoTextError(filePath);
+    throw new NoTextError(label);
   }
 
   return pages;

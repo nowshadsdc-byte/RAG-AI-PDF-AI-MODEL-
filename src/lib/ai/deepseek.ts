@@ -37,6 +37,8 @@ export async function generateAnswerWithDeepSeek(
       // limit, so it must be generous or `content` comes back null.
       max_tokens: 4096,
     }),
+    // Never let a hanging provider block the chat request forever.
+    signal: AbortSignal.timeout(30_000),
   });
 
   // InferX answers 429/503 when its replicas are busy; retry with backoff.
