@@ -34,6 +34,11 @@ yarn-error.log*
 .env*
 !.env.example
 
+# uploaded PDFs and local test PDFs
+/storage/
+/samples/
+~$*.xlsx
+
 # vercel
 .vercel
 

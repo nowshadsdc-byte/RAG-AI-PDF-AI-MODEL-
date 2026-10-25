@@ -8,6 +8,12 @@ async function main() {
   const [vector] = await embed(["hello world"]);
   console.log(`Embeddings OK: ${vector.length} dims`);
 
+  // 60 inputs -> two API calls (batches of 50); order must be preserved.
+  const many = Array.from({ length: 60 }, (_, i) => `test sentence ${i}`);
+  const vectors = await embed(many);
+  const [question] = await embed(["what is a test?"], "query");
+  console.log(`Batching OK: ${vectors.length} vectors · query OK: ${question.length} dims`);
+
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const started = Date.now();
   const response = await ai.models.generateContent({

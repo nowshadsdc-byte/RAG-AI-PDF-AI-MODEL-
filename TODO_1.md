@@ -4,16 +4,19 @@
 > End of every session: lint + typecheck → commit → update this file → mark task Done in the spreadsheet.
 
 ## Next
-- **T08: PDF text extraction.** First step: `npm i unpdf`, then create `lib/extract.ts` exporting `extractPages(filePath): Promise<{ page: number; text: string }[]>`.
+- **Finish T09/T12 with your own samples:** put a lecture-notes PDF, a research paper and a scanned PDF in `samples/`, run `npx tsx scripts/try-chunk.ts samples/<file>.pdf` on each, and fill in the chunk counts under Quick notes.
+- Then T14: run the `rag-reviewer` agent and plan Week 3 (T15 ingestion script).
 
-## Last session — 31 Oct 2026 — T07 Buffer / review ✅
-- Done: Week 1 complete — Next.js app on GitHub, Postgres + pgvector in Docker, Drizzle schema (5 tables) migrated, Gemini test script works.
-- Problems: _(fill in)_
+## Last session — 25 Oct 2026 — Week 2 code (T08–T13) ✅
+- Done: `src/lib/extract.ts` (unpdf, page by page, `NoTextError`, pages < 20 chars flagged empty), `src/lib/clean.ts` (hyphen join, whitespace, repeated header/footer lines), `src/lib/chunk.ts` (per page, ~600 tokens / 80 overlap, `words × 1.33`), `embed()` now batches 50 per call, retries 429/503 and takes `"document" | "query"` task type (kept in `src/lib/ai/gemini.ts` behind `lib/ai`, not a separate `embed.ts`).
+- Scripts: `scripts/try-extract.ts <pdf> [--raw]`, `scripts/try-chunk.ts <pdf>` (runs the T12 checks), `npm run test:gemini` (now also tests batching + query embeddings).
+- Tested: 31-page OSHA trainer guide → 32 chunks, 1.07/page, all checks pass; blank PDF → "no text" ✅; 60-text batch → 60 × 768 ✅.
+- Problems: header removal only catches lines on ≥ 60% of pages — the OSHA guide's header changes in the appendix, so it stays. Fine for now; revisit only if retrieval suffers.
 
 ## This week — Week 2: Extraction & Chunking (1 – 7 Nov)
 **Goal:** a PDF turns into clean, page-tagged chunks with 768-dim embeddings (in memory, not yet saved to the DB).
 
-- [ ] **T08 · Sun 1 Nov — PDF text extraction**
+- [x] **T08 · Sun 1 Nov — PDF text extraction**
   - `npm i unpdf`; write `lib/extract.ts` → `[{ page, text }]`
   - `scripts/try-extract.ts` prints page count + first 200 chars of each page
   - ✅ Done when: text prints per page for one PDF
@@ -23,12 +26,12 @@
   - Flag pages with < 20 characters as empty; if all pages are empty → throw `NoTextError`
   - ✅ Done when: the scanned PDF is reported as "no text"
 
-- [ ] **T10 · Tue 3 Nov — Text cleaning**
+- [x] **T10 · Tue 3 Nov — Text cleaning**
   - `lib/clean.ts`: collapse whitespace, join hyphenated line breaks (`informa-\ntion` → `information`), trim
   - Optional: drop a line repeated on most pages (header/footer)
   - ✅ Done when: output looks clean on all 3 PDFs
 
-- [ ] **T11 · Wed 4 Nov — Chunker**
+- [x] **T11 · Wed 4 Nov — Chunker**
   - `lib/chunk.ts` → `[{ pageNumber, chunkIndex, content }]`
   - ~600 tokens, 80 overlap; estimate tokens as `words × 1.33`; chunk **per page** so each chunk has one page number
   - ✅ Done when: chunks print with page numbers
@@ -38,7 +41,7 @@
   - Log chunk count per sample PDF in Quick notes below
   - ✅ Done when: counts look sensible (≈ 1–2 chunks per page)
 
-- [ ] **T13 · Fri 6 Nov — Embedding function**
+- [x] **T13 · Fri 6 Nov — Embedding function**
   - `lib/ai/embed.ts` using the Gemini embedding model, output dimensionality **768**
   - Batch requests (e.g. 50 per call), retry with a short wait on rate-limit (429)
   - Use separate task types for documents vs. questions if the API supports it
