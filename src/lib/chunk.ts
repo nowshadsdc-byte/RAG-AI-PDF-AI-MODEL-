@@ -17,11 +17,14 @@ export function estimateTokens(text: string): number {
 // Splits text into chunks per page, so every chunk has exactly one page
 // number (core rule 2). Consecutive chunks of the same page share
 // `overlap` tokens so a sentence cut at a boundary still appears whole once.
-// chunkIndex counts across the whole document (unique per document in the DB).
+// chunkIndex counts across the whole document (unique per document in the DB);
+// when a large PDF is chunked in page batches, `startIndex` continues the
+// count from the previous batch.
 export function chunkPages(
   pages: PageText[],
   size = chunkTokens,
   overlap = overlapTokens,
+  startIndex = 0,
 ): Chunk[] {
   const wordsPerChunk = Math.floor(size / tokensPerWord);
   const overlapWords = Math.floor(overlap / tokensPerWord);
@@ -34,7 +37,7 @@ export function chunkPages(
     for (let start = 0; start < words.length; start += step) {
       chunks.push({
         pageNumber: page.page,
-        chunkIndex: chunks.length,
+        chunkIndex: startIndex + chunks.length,
         content: words.slice(start, start + wordsPerChunk).join(" "),
       });
       // Stop once this chunk reached the end of the page, so the last chunk

@@ -1,13 +1,24 @@
 "use client";
 
-import { FileText, Loader2, Send, Trash2, Upload } from "lucide-react";
+import { FileText, Loader2, RotateCw, Send, Trash2, Upload } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { Badge } from "@/src/components/ui/badge";
 import { Button } from "@/src/components/ui/button";
 import { Textarea } from "@/src/components/ui/textarea";
+import { type UploadItem, UploadProgressCard } from "@/src/components/upload-progress";
 import type { Citation } from "@/src/lib/db/schema";
+import { formatBytes } from "@/src/lib/format";
+import { UploadCancelledError, UploadFailedError, uploadPdf } from "@/src/lib/upload-client";
 
-type DocumentItem = { id: string; name: string; chunks: number };
+type DocumentItem = {
+  id: string;
+  name: string;
+  status: "processing" | "ready" | "failed";
+  sizeBytes: number | null;
+  pageCount: number | null;
+  indexedPages: number;
+  error: string | null;
+};
 type Message =
   | { role: "user"; content: string }
   | { role: "assistant"; content: string; citations: Citation[] }
@@ -25,8 +36,9 @@ export function ChatApp() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   // Ticked documents limit the search; none ticked = search all documents.
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
+  // One entry per file being uploaded (several can run at once).
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const controllers = useRef(new Map<string, AbortController>());
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
@@ -41,33 +53,98 @@ export function ChatApp() {
   }
 
   useEffect(() => {
-    // Initial load of the document list when the page opens. The rule warns
-    // about setState in effects, but fetching on mount is the intended use.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Initial load of the document list when the page opens.
     void loadDocuments();
   }, []);
+
+  // While any document is being indexed, refresh the list every 2 s so the
+  // progress shown is the server's real page count.
+  const indexing = documents.some((doc) => doc.status === "processing");
+  useEffect(() => {
+    if (!indexing) return;
+    const timer = setInterval(() => void loadDocuments(), 2000);
+    return () => clearInterval(timer);
+  }, [indexing]);
+
+  // Warn before closing the tab mid-upload (it could still resume later).
+  const uploadingNow = uploads.some((u) =>
+    ["preparing", "uploading", "assembling"].includes(u.progress.phase),
+  );
+  useEffect(() => {
+    if (!uploadingNow) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [uploadingNow]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, asking]);
 
-  async function upload(file: File) {
-    setUploading(true);
-    setUploadError("");
-    const form = new FormData();
-    form.append("file", file);
+  function updateUpload(key: string, change: Partial<UploadItem>) {
+    setUploads((current) => current.map((u) => (u.key === key ? { ...u, ...change } : u)));
+  }
+
+  // Starts (or, for a retry, resumes) the chunked upload of one file.
+  async function startUpload(key: string, file: File) {
+    const controller = new AbortController();
+    controllers.current.set(key, controller);
+    updateUpload(key, { error: undefined, retryable: undefined });
 
     try {
-      const response = await fetch("/api/documents", { method: "POST", body: form });
-      if (!response.ok) {
-        setUploadError(await errorFrom(response, "Upload failed."));
-      }
+      const { documentId } = await uploadPdf(file, {
+        signal: controller.signal,
+        onProgress: (progress) => updateUpload(key, { progress }),
+      });
+      updateUpload(key, { documentId });
       await loadDocuments();
-    } catch {
-      setUploadError("Network error — check your connection and try again.");
+    } catch (error) {
+      if (error instanceof UploadCancelledError) {
+        setUploads((current) => current.filter((u) => u.key !== key));
+        return;
+      }
+      setUploads((current) =>
+        current.map((u) =>
+          u.key === key
+            ? {
+                ...u,
+                progress: { ...u.progress, phase: "failed", bytesPerSecond: 0 },
+                error: error instanceof Error ? error.message : "Upload failed.",
+                retryable: error instanceof UploadFailedError ? error.retryable : true,
+              }
+            : u,
+        ),
+      );
     } finally {
-      setUploading(false);
+      controllers.current.delete(key);
     }
+  }
+
+  function addFiles(files: FileList) {
+    for (const file of Array.from(files)) {
+      const key = crypto.randomUUID();
+      const item: UploadItem = {
+        key,
+        file,
+        progress: {
+          phase: "preparing",
+          uploadedBytes: 0,
+          totalBytes: file.size,
+          bytesPerSecond: 0,
+          resumed: false,
+        },
+      };
+      setUploads((current) => [...current, item]);
+      void startUpload(key, file);
+    }
+  }
+
+  async function reindex(doc: DocumentItem) {
+    const response = await fetch(`/api/documents/${doc.id}/reindex`, { method: "POST" }).catch(
+      () => null,
+    );
+    if (!response?.ok) alert(`Could not restart indexing of "${doc.name}".`);
+    await loadDocuments();
   }
 
   async function remove(doc: DocumentItem) {
@@ -141,18 +218,33 @@ export function ChatApp() {
           ref={fileInput}
           type="file"
           accept="application/pdf,.pdf"
+          multiple
           className="hidden"
           onChange={(event) => {
-            const file = event.target.files?.[0];
+            if (event.target.files) addFiles(event.target.files);
             event.target.value = ""; // allow picking the same file again
-            if (file) void upload(file);
           }}
         />
-        <Button onClick={() => fileInput.current?.click()} disabled={uploading}>
-          {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
-          {uploading ? "Indexing…" : "Upload PDF"}
+        <Button onClick={() => fileInput.current?.click()}>
+          <Upload /> Upload PDF
         </Button>
-        {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
+
+        {uploads.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {uploads.map((item) => (
+              <UploadProgressCard
+                key={item.key}
+                item={item}
+                indexing={documents.find((d) => d.id === item.documentId)}
+                onRetry={() => void startUpload(item.key, item.file)}
+                onCancel={() => controllers.current.get(item.key)?.abort()}
+                onDismiss={() =>
+                  setUploads((current) => current.filter((u) => u.key !== item.key))
+                }
+              />
+            ))}
+          </div>
+        )}
 
         <p className="text-xs text-muted-foreground">
           {selected.size === 0
@@ -169,6 +261,8 @@ export function ChatApp() {
               <input
                 type="checkbox"
                 aria-label={`Search in ${doc.name}`}
+                // Only fully indexed documents can be searched.
+                disabled={doc.status !== "ready"}
                 checked={selected.has(doc.id)}
                 onChange={() => toggle(doc.id)}
               />
@@ -177,11 +271,35 @@ export function ChatApp() {
                 target="_blank"
                 rel="noreferrer"
                 className="flex min-w-0 flex-1 items-center gap-1.5 text-sm hover:underline"
-                title={`${doc.name} · ${doc.chunks} chunks`}
+                title={[
+                  doc.name,
+                  doc.sizeBytes ? formatBytes(doc.sizeBytes) : null,
+                  doc.pageCount ? `${doc.pageCount} pages` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               >
                 <FileText className="size-4 shrink-0" />
                 <span className="truncate">{doc.name}</span>
               </a>
+              {doc.status === "processing" && (
+                <Badge variant="secondary" className="shrink-0 tabular-nums">
+                  {doc.pageCount
+                    ? `${Math.floor((doc.indexedPages / doc.pageCount) * 100)}%`
+                    : "…"}
+                </Badge>
+              )}
+              {doc.status === "failed" && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Retry indexing ${doc.name}`}
+                  title={doc.error ?? "Indexing failed — retry"}
+                  onClick={() => void reindex(doc)}
+                >
+                  <RotateCw className="text-destructive" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon-sm"

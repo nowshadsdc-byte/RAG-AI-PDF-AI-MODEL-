@@ -8,6 +8,14 @@
 - **T18 retrieval test:** ingest your samples (`npx tsx scripts/ingest.ts samples/<file>.pdf`), write 10 questions with the expected page, run `npx tsx scripts/ask.ts "<q>" --search` and record hits in the Eval Log. Tune chunk size / top-k (T19) only with that evidence.
 - Then Week 6: Auth.js credentials + bcrypt — replace the body of `getCurrentUserId()` in `src/lib/current-user.ts` with the session user; nothing else should need to change.
 
+## Session — 25 Oct 2026 — Large PDF uploads ✅
+- Chunked, resumable uploads (8 MB chunks, SHA-256 per chunk, 3 parallel, retry) → `src/lib/uploads.ts`, `src/lib/upload-client.ts`, `app/api/uploads/**`. No app size limit (optional `MAX_UPLOAD_BYTES`); disk space checked.
+- Indexing is now a background queue (one document at a time, 20-page batches, `documents.status / indexed_pages`) → `src/lib/index-queue.ts`, `src/lib/ingest.ts`; restarted after a server restart via `instrumentation.ts`. Failed documents have a "retry indexing" button.
+- UI: one progress card per upload with real %, bytes, speed, phases (uploading → assembling → indexing page x/y → ready), Retry and Cancel.
+- DB: new `uploads`, `upload_chunks` tables; new `documents` columns; `storage_path` is now relative to `STORAGE_DIR`.
+- Tested: `npm test` 18/18 (upload integration tests: out-of-order + duplicate chunks, bad hash, oversize, missing chunk, concurrent complete, other user, cleanup). 1 GB PDF over HTTP: interrupted after 42/126 chunks, resumed sending only 84, SHA-256 identical to source, server memory flat (~0.5 GB) during upload, ~1.8 GB peak only while pdf.js indexed it.
+- Not yet checked by hand: the progress UI in a real browser (DevTools "Offline" mid-upload → Retry).
+
 ## Session — 25 Oct 2026 — W3–W5 code ✅
 - **W3 indexing & retrieval:** `src/lib/ingest.ts` (extract → clean → chunk → embed → save file as `storage/documents/<uuid>.pdf` → one DB transaction), `src/lib/search.ts` (cosine `<=>` top-5, HNSW index already migrated, filtered by `user_id`), `scripts/ingest.ts`, `scripts/ask.ts "<q>" --search`.
 - **W4 cited answers:** `src/lib/answer.ts` → `{ answer, citations: [{ documentId, documentName, page }] }`. The prompt asks the model to cite `[n]`; markers are mapped back to document + page (unknown numbers ignored). "Not found" → no citations.

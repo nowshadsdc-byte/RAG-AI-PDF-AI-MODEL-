@@ -38,6 +38,8 @@ export async function searchChunks(
     .where(
       and(
         eq(documents.userId, userId),
+        // Half-indexed documents are not searched until indexing finishes.
+        eq(documents.status, "ready"),
         // No filter given (or an empty list) = search all of the user's documents.
         options.documentIds?.length
           ? inArray(documents.id, options.documentIds)

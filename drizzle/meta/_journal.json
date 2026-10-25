@@ -15,6 +15,20 @@
       "when": 1792832494141,
       "tag": "0001_faulty_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792922139617,
+      "tag": "0002_large_uploads",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792922229979,
+      "tag": "0003_storage_paths_relative",
+      "breakpoints": true
     }
   ]
 }
