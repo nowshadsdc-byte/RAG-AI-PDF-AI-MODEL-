@@ -4,12 +4,31 @@ import { chunkPages } from "./chunk";
 import { cleanPages } from "./clean";
 import { db } from "./db";
 import { documentChunks, documents } from "./db/schema";
-import { extractPageText, NoTextError, openPdf, type PageText } from "./extract";
+import { extractPageText, isEmptyPage, NoTextError, openPdf, type PageText } from "./extract";
 import { resolveStoragePath } from "./storage";
 
 // Pages handled per step. Only this many pages of text, chunks and vectors
 // are in memory at once, and progress is saved after every batch.
 const pagesPerBatch = 20;
+
+// A PDF where fewer than 10% of pages have text is treated as scanned: its
+// few text pages are usually just a watermark or cover, and answers from
+// them would be useless. (Only for PDFs of 10+ pages.)
+const minTextPageRatio = 0.1;
+
+// The message stored in documents.error and shown in the UI. Never the raw
+// error: DB errors embed the query and its data (which once contained a NUL
+// byte that made even this update fail and left the document stuck).
+function userMessage(error: unknown): string {
+  if (error instanceof NoTextError) {
+    return "This PDF has (almost) no selectable text — it looks scanned. OCR is not supported.";
+  }
+  if (error instanceof Error && error.message.startsWith("Failed query")) {
+    return "Saving the index failed. Try again.";
+  }
+  const text = error instanceof Error ? error.message : "Indexing failed.";
+  return text.replace(/[\u0000-\u001F]/g, " ").slice(0, 300);
+}
 
 export type IndexResult = { pages: number; chunks: number };
 
@@ -38,6 +57,7 @@ export async function indexStoredDocument(
     await db.update(documents).set({ pageCount }).where(eq(documents.id, documentId));
 
     let chunkCount = 0;
+    let textPages = 0;
     for (let first = 1; first <= pageCount; first += pagesPerBatch) {
       const last = Math.min(first + pagesPerBatch - 1, pageCount);
       const batch: PageText[] = [];
@@ -45,7 +65,9 @@ export async function indexStoredDocument(
         batch.push({ page, text: await extractPageText(pdf, page) });
       }
 
-      const chunks = chunkPages(cleanPages(batch), undefined, undefined, chunkCount);
+      const cleaned = cleanPages(batch);
+      textPages += cleaned.filter((page) => !isEmptyPage(page)).length;
+      const chunks = chunkPages(cleaned, undefined, undefined, chunkCount);
       if (chunks.length > 0) {
         const vectors = await embed(
           chunks.map((chunk) => chunk.content),
@@ -70,21 +92,23 @@ export async function indexStoredDocument(
       onProgress?.(last, pageCount);
     }
 
-    if (chunkCount === 0) throw new NoTextError(document.name);
+    const mostlyScanned = pageCount >= 10 && textPages / pageCount < minTextPageRatio;
+    if (chunkCount === 0 || mostlyScanned) throw new NoTextError(document.name);
 
     await db.update(documents).set({ status: "ready" }).where(eq(documents.id, documentId));
     return { pages: pageCount, chunks: chunkCount };
   } catch (error) {
-    const message =
-      error instanceof NoTextError
-        ? "This PDF has no selectable text (scanned PDFs are not supported)."
-        : error instanceof Error
-          ? error.message
-          : "Indexing failed.";
-    // If the document was deleted meanwhile, this updates nothing — fine.
+    // The document must never stay "processing" (the UI would wait forever),
+    // so marking it failed is attempted even if the cleanup step fails.
+    // If the document was deleted meanwhile, these update nothing — fine.
+    try {
+      await db.delete(documentChunks).where(eq(documentChunks.documentId, documentId));
+    } catch (cleanupError) {
+      console.error(`[index] could not remove chunks of ${documentId}:`, cleanupError);
+    }
     await db
       .update(documents)
-      .set({ status: "failed", error: message })
+      .set({ status: "failed", error: userMessage(error) })
       .where(eq(documents.id, documentId));
     throw error;
   } finally {

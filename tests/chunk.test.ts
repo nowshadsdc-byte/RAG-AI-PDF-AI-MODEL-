@@ -37,3 +37,8 @@ test("neighbouring chunks of one page overlap", () => {
   const opening = b.content.split(" ").slice(0, 5).join(" ");
   assert.ok(a.content.includes(opening));
 });
+
+test("cleaning removes NUL and control characters (PostgreSQL rejects NUL)", async () => {
+  const { cleanText } = await import("../src/lib/clean");
+  assert.equal(cleanText("কর\u0000ন  এখানে\u0007\n বই"), "করন এখানে বই");
+});

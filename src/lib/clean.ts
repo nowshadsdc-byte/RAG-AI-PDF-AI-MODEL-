@@ -5,6 +5,10 @@ import type { PageText } from "./extract";
 export function cleanText(text: string): string {
   return (
     text
+      // pdf.js emits NUL (\x00) and other control characters for glyphs it
+      // cannot map (common in Bangla PDFs). PostgreSQL rejects NUL in text
+      // columns, so they must go. \t and \n are kept for the steps below.
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
       // "informa-\ntion" -> "information"
       .replace(/(\w)-\s*\n\s*(\w)/g, "$1$2")
       // Any run of whitespace (spaces, tabs, newlines) -> one space
