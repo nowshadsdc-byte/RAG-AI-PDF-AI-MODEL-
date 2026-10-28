@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { getCurrentUserId } from "@/src/lib/current-user";
+import { userIdOr401 } from "@/src/lib/http";
 import { getDocument } from "@/src/lib/documents";
 import { openDocumentStream, storedFileSize } from "@/src/lib/storage";
 
@@ -9,7 +9,8 @@ import { openDocumentStream, storedFileSize } from "@/src/lib/storage";
 // opens at the cited page.
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]/file">) {
   const { id } = await ctx.params;
-  const userId = await getCurrentUserId();
+  const userId = await userIdOr401();
+  if (userId instanceof Response) return userId;
 
   const document = await getDocument(userId, id);
   const size = document && (await storedFileSize(document.storagePath));

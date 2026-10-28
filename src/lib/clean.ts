@@ -9,8 +9,10 @@ export function cleanText(text: string): string {
       // cannot map (common in Bangla PDFs). PostgreSQL rejects NUL in text
       // columns, so they must go. \t and \n are kept for the steps below.
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-      // "informa-\ntion" -> "information"
-      .replace(/(\w)-\s*\n\s*(\w)/g, "$1$2")
+      // "informa-\ntion" -> "information". Only when the next line starts
+      // lowercase, so "COVID-\n19" and "Bangla-\nEnglish" keep their hyphen.
+      .replace(/(\w)-\s*\n\s*([a-z])/g, "$1$2")
+      .replace(/(\w)-\s*\n\s*/g, "$1-")
       // Any run of whitespace (spaces, tabs, newlines) -> one space
       .replace(/\s+/g, " ")
       .trim()

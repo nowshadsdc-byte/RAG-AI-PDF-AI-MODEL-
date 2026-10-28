@@ -1,29 +1,18 @@
-import { eq } from "drizzle-orm";
-import { db } from "./db";
-import { users } from "./db/schema";
+import { auth } from "./auth";
 
-// TEMPORARY until Week 6 (Auth.js). Every query is already scoped by a
-// user id; for now that id belongs to one local "dev" user. In W6 this
-// function will read the id from the logged-in session instead, and no
-// other code has to change.
-const devEmail = "dev@localhost";
+// Thrown when a request has no valid session; API routes turn it into 401.
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Please log in.");
+  }
+}
 
+// The logged-in user's id, read from the Auth.js session cookie. Every API
+// route gets its user here and scopes all queries by it (core rule 5).
+// proxy.ts already turns away most logged-out requests; this is the real check.
 export async function getCurrentUserId(): Promise<string> {
-  const existing = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, devEmail));
-  if (existing[0]) return existing[0].id;
-
-  // "!" is not a valid bcrypt hash, so nobody can ever log in as this user.
-  const [created] = await db
-    .insert(users)
-    .values({ email: devEmail, passwordHash: "!" })
-    .onConflictDoNothing()
-    .returning({ id: users.id });
-  if (created) return created.id;
-
-  // Another request created it at the same moment; read it again.
-  const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, devEmail));
-  return row.id;
+  const session = await auth();
+  const id = session?.user?.id;
+  if (!id) throw new UnauthorizedError();
+  return id;
 }

@@ -1,4 +1,4 @@
-import type { PageText } from "./extract";
+import { isEmptyPage, type PageText } from "./extract";
 
 export type Chunk = { pageNumber: number; chunkIndex: number; content: string };
 
@@ -32,6 +32,8 @@ export function chunkPages(
 
   const chunks: Chunk[] = [];
   for (const page of pages) {
+    // A near-empty page (e.g. only "Figure 3") would just add search noise.
+    if (isEmptyPage(page)) continue;
     const words = page.text.split(/\s+/).filter(Boolean);
 
     for (let start = 0; start < words.length; start += step) {

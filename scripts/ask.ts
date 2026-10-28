@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { answerQuestion } from "../src/lib/answer";
 import { db } from "../src/lib/db";
-import { getCurrentUserId } from "../src/lib/current-user";
+import { getScriptUserId } from "../src/lib/users";
 import { searchChunks } from "../src/lib/search";
 
 // T17 + W4: ask a question from the terminal.
@@ -13,7 +13,7 @@ async function main() {
     throw new Error('Usage: npx tsx scripts/ask.ts "<question>" [--search]');
   }
 
-  const userId = await getCurrentUserId();
+  const userId = await getScriptUserId();
   const started = Date.now();
 
   if (flag === "--search") {

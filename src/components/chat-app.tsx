@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, Loader2, RotateCw, Send, Trash2, Upload } from "lucide-react";
-import { type SubmitEvent, useEffect, useRef, useState } from "react";
+import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { Badge } from "@/src/components/ui/badge";
 import { Button } from "@/src/components/ui/button";
 import { Textarea } from "@/src/components/ui/textarea";
@@ -32,7 +32,8 @@ async function errorFrom(response: Response, fallback: string): Promise<string> 
 
 // The whole chat screen: documents on the left, conversation on the right.
 // All data comes from the API routes in app/api, which check ownership.
-export function ChatApp() {
+// `userMenu` is rendered by the server (it reads the session); see app/page.tsx.
+export function ChatApp({ userMenu }: { userMenu?: ReactNode }) {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   // Ticked documents limit the search; none ticked = search all documents.
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -213,6 +214,7 @@ export function ChatApp() {
     <div className="flex h-dvh flex-col md:flex-row">
       <aside className="flex max-h-[40dvh] flex-col gap-3 border-b p-4 md:max-h-none md:w-72 md:border-r md:border-b-0">
         <h1 className="text-lg font-semibold">Chat with PDF</h1>
+        {userMenu}
 
         <input
           ref={fileInput}

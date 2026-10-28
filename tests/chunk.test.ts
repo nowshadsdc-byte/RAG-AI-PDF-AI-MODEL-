@@ -42,3 +42,14 @@ test("cleaning removes NUL and control characters (PostgreSQL rejects NUL)", asy
   const { cleanText } = await import("../src/lib/clean");
   assert.equal(cleanText("কর\u0000ন  এখানে\u0007\n বই"), "করন এখানে বই");
 });
+
+test("hyphenated line breaks join only before a lowercase letter", async () => {
+  const { cleanText } = await import("../src/lib/clean");
+  assert.equal(cleanText("informa-\ntion"), "information");
+  assert.equal(cleanText("COVID-\n19"), "COVID-19");
+  assert.equal(cleanText("Bangla-\nEnglish"), "Bangla-English");
+});
+
+test("near-empty pages (< 20 characters) produce no chunks", () => {
+  assert.deepEqual(chunkPages([{ page: 1, text: "Figure 3" }]), []);
+});

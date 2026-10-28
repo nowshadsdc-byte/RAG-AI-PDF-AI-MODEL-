@@ -3,7 +3,9 @@ import { ApiError, GoogleGenAI } from "@google/genai";
 const embeddingModel = "gemini-embedding-001";
 export const embeddingDimensions = 768;
 // Inputs sent per API call; a large PDF is embedded in several calls.
-const batchSize = 50;
+// 20 chunks × ~600 tokens ≈ 12k tokens, well under the free tier's 30k
+// tokens/minute, so a 429 is the exception rather than every other call.
+const batchSize = 20;
 
 // Documents and questions are embedded differently so a short question
 // lands close to the passage that answers it.
@@ -39,6 +41,14 @@ export async function embedWithGemini(
   return vectors;
 }
 
+// Use the wait Gemini suggests (+1 s margin, at most 65 s); otherwise
+// back off 2/4/6… s.
+function retryDelayMs(error: ApiError, attempt: number): number {
+  const suggested = /retry in ([\d.]+)s/i.exec(error.message);
+  if (suggested) return Math.min(Number(suggested[1]) * 1000 + 1000, 65_000);
+  return attempt * 2000;
+}
+
 async function embedBatch(
   client: GoogleGenAI,
   texts: string[],
@@ -55,7 +65,10 @@ async function embedBatch(
     });
 
   // The free tier answers 429 when we send too fast (503 when Gemini is
-  // overloaded); wait and retry (2/4/6 s).
+  // overloaded); wait and retry. The free tier allows 30,000 embedding
+  // tokens per minute, so a large PDF hits it often — Gemini then says how
+  // long to wait ("retry in 16.6s"), and we wait that long instead of
+  // giving up.
   let response;
   for (let attempt = 1; ; attempt++) {
     try {
@@ -64,8 +77,13 @@ async function embedBatch(
     } catch (error) {
       const retryable =
         error instanceof ApiError && (error.status === 429 || error.status === 503);
-      if (!retryable || attempt > 3) throw error;
-      await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      if (!retryable || attempt > 6) throw error;
+      // The daily quota does not reset in a minute: fail now with a clear
+      // reason instead of retrying for minutes and failing anyway.
+      if (/PerDay/i.test(error.message)) {
+        throw new Error("Daily Gemini embedding quota reached — try again tomorrow.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs(error, attempt)));
     }
   }
 

@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import { db } from "../src/lib/db";
-import { getCurrentUserId } from "../src/lib/current-user";
+import { getScriptUserId } from "../src/lib/users";
 import { documents } from "../src/lib/db/schema";
 import { indexStoredDocument } from "../src/lib/ingest";
 import { documentRelPath, writeDocumentFile } from "../src/lib/storage";
 
-// T15: index a PDF from the terminal (for the dev user, until W6 auth).
+// T15: index a PDF from the terminal, as the default user from .env.
 // Copies the file into storage (streamed, any size), creates the document
 // row, then indexes it here directly — no web server needed.
 // Usage: npx tsx scripts/ingest.ts <file.pdf>
@@ -19,7 +19,7 @@ async function main() {
   }
 
   const started = Date.now();
-  const userId = await getCurrentUserId();
+  const userId = await getScriptUserId();
   const documentId = randomUUID();
   const relPath = documentRelPath(documentId);
   const { size, sha256 } = await writeDocumentFile(relPath, [() => createReadStream(filePath)]);

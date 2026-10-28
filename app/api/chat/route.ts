@@ -1,5 +1,5 @@
 import { answerQuestion } from "@/src/lib/answer";
-import { getCurrentUserId } from "@/src/lib/current-user";
+import { userIdOr401 } from "@/src/lib/http";
 import { isUuid } from "@/src/lib/documents";
 import { notFoundAnswer } from "@/src/lib/prompts";
 
@@ -7,7 +7,8 @@ const maxQuestionChars = 2000;
 
 // POST /api/chat { question, documentIds? } -> { answer, citations }
 export async function POST(request: Request) {
-  const userId = await getCurrentUserId();
+  const userId = await userIdOr401();
+  if (userId instanceof Response) return userId;
   const body: unknown = await request.json().catch(() => null);
 
   const question =

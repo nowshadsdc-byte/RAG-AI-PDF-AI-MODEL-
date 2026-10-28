@@ -1,0 +1,14 @@
+[
+  { "pdf": "research-paper.pdf", "question": "How many identical layers does the Transformer encoder stack have?", "expectedPage": 3 },
+  { "pdf": "research-paper.pdf", "question": "What hardware were the Transformer models trained on?", "expectedPage": 7 },
+  { "pdf": "research-paper.pdf", "question": "Which beta values were used with the Adam optimizer?", "expectedPage": 7 },
+  { "pdf": "research-paper.pdf", "question": "What value of label smoothing was used during training?", "expectedPage": 8 },
+  { "pdf": "lecture-notes.pdf", "question": "What is the LMS update rule also known as?", "expectedPage": 12 },
+  { "pdf": "lecture-notes.pdf", "question": "What is the logistic or sigmoid function g(z) and how does it behave as z goes to infinity?", "expectedPage": 23 },
+  { "pdf": "lecture-notes.pdf", "question": "What is the clustering problem that k-means solves?", "expectedPage": 148 },
+  { "pdf": "lecture-notes.pdf", "question": "What does Jensen's inequality state?", "expectedPage": 154 },
+  { "pdf": "lecture-notes.pdf", "question": "What does principal components analysis try to identify?", "expectedPage": 168 },
+  { "pdf": "lecture-notes.pdf", "question": "In reinforcement learning, why is the reward at timestep t discounted?", "expectedPage": 230 },
+  { "pdf": null, "question": "What is the capital of France?", "expectedPage": null },
+  { "pdf": null, "question": "Who won the 2022 FIFA World Cup?", "expectedPage": null }
+]
